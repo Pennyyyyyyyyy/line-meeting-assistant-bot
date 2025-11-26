@@ -67,7 +67,7 @@ function mergeAvailabilities(slots, availabilities) {
   return merged;
 }
 
-// 從 merged 結果中找出「最多人可以」的時間區段
+// 原本的版本：只算「全程都在場的人」的交集
 // minDurationSlots 表示會議最少需要幾個 slot，例如 2 代表 1 小時（slot = 30 分鐘）
 function findBestSlots(merged, minDurationSlots = 2) {
   const slotKeys = Object.keys(merged);
@@ -111,8 +111,131 @@ function findBestSlots(merged, minDurationSlots = 2) {
   };
 }
 
+// ===== 新增：考慮「部分出席」的版本 =====
+
+// 統計一個會議 window（例如 ['20:00','20:30']）內
+// 每個 user 是「全程有空 / 部分有空 / 完全沒空」
+function analyzeWindowForUsers(merged, windowSlots, allUserIds) {
+  const fullAvailable = [];
+  const partialAvailable = [];
+  const unavailable = [];
+
+  for (const userId of allUserIds) {
+    let countAvailable = 0;
+
+    for (const slot of windowSlots) {
+      const slotAvail = merged[slot]?.available || [];
+      if (slotAvail.includes(userId)) {
+        countAvailable++;
+      }
+    }
+
+    if (countAvailable === windowSlots.length) {
+      // 每一格都有空 → 全程可參加
+      fullAvailable.push(userId);
+    } else if (countAvailable > 0) {
+      // 至少一格有空，但不是全部 → 部分可參加（例如要提早走）
+      partialAvailable.push(userId);
+    } else {
+      // 完全沒有重疊 → 這段時間都不能來
+      unavailable.push(userId);
+    }
+  }
+
+  return {
+    fullAvailable,
+    partialAvailable,
+    unavailable,
+  };
+}
+
+// 新版本：
+// - 目標：找「總共能出現的人」最多的時間（全程 + 部分）
+// - 同分時優先「全程可參加的人」比較多的 window
+function findBestSlotsWithPartial(merged, minDurationSlots = 2) {
+  const slotKeys = Object.keys(merged);
+
+  // 找出所有出現過的 userId（不管是 available / unavailable）
+  const userSet = new Set();
+  for (const slot of slotKeys) {
+    for (const u of merged[slot].available) {
+      userSet.add(u);
+    }
+    for (const u of merged[slot].unavailable) {
+      userSet.add(u);
+    }
+  }
+  const allUserIds = Array.from(userSet);
+
+  // ⭐ 至少要幾個人能參加，才算是一個「合理的會議」？
+  const MIN_PARTICIPANTS = 2;
+
+  let bestTotalCanAttend = 0; // 全程 + 部分 的人數
+  let bestFullCount = 0; // 全程可參加的人數（當作次要排序）
+  let candidates = [];
+
+  for (let i = 0; i <= slotKeys.length - minDurationSlots; i++) {
+    const windowSlots = slotKeys.slice(i, i + minDurationSlots);
+
+    const stats = analyzeWindowForUsers(merged, windowSlots, allUserIds);
+    const totalCanAttend = stats.fullAvailable.length + stats.partialAvailable.length;
+
+    // ⭐ 只有 0 或 1 個人能來，一律忽略，不當成候選
+    if (totalCanAttend < MIN_PARTICIPANTS) continue;
+
+    if (
+      totalCanAttend > bestTotalCanAttend ||
+      (totalCanAttend === bestTotalCanAttend &&
+        stats.fullAvailable.length > bestFullCount)
+    ) {
+      bestTotalCanAttend = totalCanAttend;
+      bestFullCount = stats.fullAvailable.length;
+      candidates = [
+        {
+          slots: windowSlots,
+          ...stats,
+        },
+      ];
+    } else if (
+      totalCanAttend === bestTotalCanAttend &&
+      stats.fullAvailable.length === bestFullCount
+    ) {
+      candidates.push({
+        slots: windowSlots,
+        ...stats,
+      });
+    }
+  }
+
+  return {
+    bestTotalCanAttend,
+    bestFullCount,
+    candidates,
+  };
+}
+
+// 根據總人數，決定「這個會議至少要幾個人能來」才算可以開
+function getRequiredParticipants(totalUsers) {
+  if (totalUsers <= 3) {
+    // 3 人以下要全到
+    return totalUsers;
+  }
+  if (totalUsers <= 8) {
+    // 4~8 人最多 2 個人不到
+    return totalUsers - 2;
+  }
+  if (totalUsers <= 11) {
+    // 9~11 人最多 3 個人不到
+    return totalUsers - 3;
+  }
+  // 12 人以上，只要過半數
+  return Math.ceil(totalUsers / 2);
+}
+
+
 module.exports = {
   generateTimeSlots,
   mergeAvailabilities,
   findBestSlots,
+  findBestSlotsWithPartial,
 };
