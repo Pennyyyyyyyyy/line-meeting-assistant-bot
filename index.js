@@ -3,11 +3,17 @@ require('dotenv').config();
 
 const express = require('express');
 const line = require('@line/bot-sdk');
+
+// Vision：解析課表圖片
+const { parseScheduleImage } = require('./src/visionParser');
+const { saveUserDefaultCalendar } = require('./src/calendarStore');
+
+// 之後會根據大家的可用時間計算「建議開會時段」，相關演算法都放在 src/scheduler.js
 const {
   generateTimeSlots,
   mergeAvailabilities,
   findBestSlotsWithPartial,
-} = require('./src/scheduler');
+} = require('./src/scheduler'); // 目前還沒用到，但未來會議排程會用到
 
 // 從 .env 抓設定（很重要：.env 每個 key 要一行）
 const config = {
@@ -44,7 +50,7 @@ if (config.channelSecret && config.channelAccessToken) {
   });
 }
 
-// ===== 小工具函式們 =====
+// ===== 小工具函式們（之後正式的「建議開會時間」功能會用到） =====
 
 // 小工具：給最後一格 slot（例如 20:30）、slotMinutes=30 → 算出結束時間（例如 21:00）
 function computeEndTime(lastSlot, slotMinutes) {
@@ -82,6 +88,7 @@ function computeFallbackRange(merged, slotMinutes) {
 }
 
 // result 來自 findBestSlotsWithPartial，merged 是 mergeAvailabilities 的結果
+// 目前還沒在 handleEvent 裡實際呼叫，之後實作「開會時間？」時會用到
 function formatMeetingSuggestion(result, merged, dayLabel = '星期二', slotMinutes = 30) {
   // ⭐ 情境 3：完全沒有符合「人數門檻」的會議時間
   if (
@@ -156,74 +163,69 @@ function formatMeetingSuggestion(result, merged, dayLabel = '星期二', slotMin
 }
 
 // 處理每一個 LINE event（只有在 client 存在的情況下才會被呼叫）
-function handleEvent(event) {
+async function handleEvent(event) {
   if (!client) {
     console.warn('⚠️ handleEvent 被呼叫，但 client 尚未初始化。');
     return Promise.resolve(null);
   }
 
-  // 只處理文字訊息
-  if (event.type !== 'message' || event.message.type !== 'text') {
+  // 只處理 message 類型（文字 / 圖片）
+  if (event.type !== 'message') {
     return Promise.resolve(null);
   }
 
-  const text = event.message.text.trim();
+  // ===== 圖片訊息：課表 screenshot → 解析 + 存常用行事曆 =====
+  if (event.message.type === 'image') {
+    try {
+      // 從 LINE 下載圖片內容
+      const stream = await client.getMessageContent(event.message.id);
+      const chunks = [];
+      for await (const chunk of stream) {
+        chunks.push(chunk);
+      }
+      const buffer = Buffer.concat(chunks);
 
-  // ✅ 特殊指令：用假資料測試「建議會議時間」三種情境格式
-  if (text === '測試會議') {
-    // 這裡先用你情境 2 的假資料：
-    // A, B 可以所有時間在；C 20:30 要提早走；D 20:30 才會到
-    const slots = generateTimeSlots({
-      startHour: 20,
-      endHour: 22, // 會產生 20:00, 20:30, 21:00, 21:30
-      slotMinutes: 30,
-    });
+      const userId = event.source?.userId || 'unknown-user';
 
-    const availabilities = [
-      {
-        userId: 'A',
-        status: 'available',
-        startTime: '20:00',
-        endTime: '21:00', // A 全程 20:00–21:00
-      },
-      {
-        userId: 'B',
-        status: 'available',
-        startTime: '20:00',
-        endTime: '21:00', // B 全程 20:00–21:00
-      },
-      {
-        userId: 'C',
-        status: 'available',
-        startTime: '20:00',
-        endTime: '20:30', // C 20:30 要走
-      },
-      {
-        userId: 'D',
-        status: 'available',
-        startTime: '20:30',
-        endTime: '21:00', // D 20:30 才到
-      },
-    ];
+      const parsed = await parseScheduleImage(buffer, userId);
 
-    const merged = mergeAvailabilities(slots, availabilities);
-    const result = findBestSlotsWithPartial(merged, 2); // 2 格 = 1 小時 20:00–21:00
+      if (!parsed) {
+        return client.replyMessage(event.replyToken, {
+          type: 'text',
+          text: '❌ 無法解析課表圖片，能否傳更清楚一點的版本？',
+        });
+      }
 
-    const messageText = formatMeetingSuggestion(result, merged, '星期二', 30);
+      // 存成這個使用者的常用行事曆
+      saveUserDefaultCalendar(userId, parsed);
+
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '📚 已成功解析課表並儲存為你的常用行事曆！',
+      });
+    } catch (err) {
+      console.error('❌ 處理圖片時發生錯誤：', err);
+      return client.replyMessage(event.replyToken, {
+        type: 'text',
+        text: '❌ 處理圖片時發生錯誤，稍後再試試看～',
+      });
+    }
+  }
+
+  // ===== 文字訊息：目前先單純 echo，之後再改成「我 18:00–20:00 有空」等邏輯 =====
+  if (event.message.type === 'text') {
+    const text = event.message.text.trim();
+
+    const replyText = `你說了：「${text}」`;
 
     return client.replyMessage(event.replyToken, {
       type: 'text',
-      text: messageText,
+      text: replyText,
     });
   }
 
-  // 其他文字：維持原本 echo 行為
-  const replyText = `你說了：「${text}」`;
-
-  return client.replyMessage(event.replyToken, {
-    type: 'text',
-    text: replyText,
-  });
+  // 其他型態先忽略
+  return Promise.resolve(null);
 }
 
 // 簡單 health check，讓你不用 LINE 也可以確認伺服器有跑起來
