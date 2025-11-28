@@ -9,13 +9,13 @@ const {
   findBestSlotsWithPartial,
 } = require('./src/scheduler');
 
+// 從 .env 抓設定（很重要：.env 每個 key 要一行）
 const config = {
   channelSecret: process.env.CHANNEL_SECRET,
   channelAccessToken: process.env.CHANNEL_ACCESS_TOKEN,
 };
 
 const app = express();
-
 let client = null;
 
 // 有設定 secret & token 才初始化 LINE client & 真正的 webhook
