@@ -91,30 +91,21 @@ This project requires a LINE Messaging API channel.
 git clone https://github.com/Pennyyyyyyyyy/line-meeting-assistant-bot.git
 cd line-meeting-assistant-bot
 npm install
+```
 
 ### Create .env
 ```bash
 CHANNEL_SECRET=xxx
 CHANNEL_ACCESS_TOKEN=xxx
 PORT=3000
+```
 
-###Run
+### Run
 ```bash
 npm start
+```
 
-flowchart TD
-    A[LINE User<br>(messages / timetable upload)]
-    B[LINE Messaging API<br>Webhook delivery]
-    C[Express Server<br>index.js]
-    D[Availability Store<br>conversation-based storage]
-    E[Scheduling Engine<br>slot generation, merging, scoring]
-    F[LINE Reply API]
-    G[User Receives Meeting Time Suggestions]
-
-    A --> B --> C
-    C --> D
-    C --> E
-    E --> F --> G
+<img width="768" height="512" alt="ChatGPT Image 2025年11月30日 上午04_33_57" src="https://github.com/user-attachments/assets/9cec4bcc-3b30-4e61-a8e5-213fd85f0aa7" />
 
 
 
