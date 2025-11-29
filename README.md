@@ -92,12 +92,14 @@ git clone https://github.com/Pennyyyyyyyyy/line-meeting-assistant-bot.git
 cd line-meeting-assistant-bot
 npm install
 
-Create .env
+### Create .env
+```bash
 CHANNEL_SECRET=xxx
 CHANNEL_ACCESS_TOKEN=xxx
 PORT=3000
 
-Run
+###Run
+```bash
 npm start
 
 flowchart TD
