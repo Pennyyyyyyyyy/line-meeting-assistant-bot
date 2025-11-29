@@ -54,9 +54,7 @@ Hoppy supports two methods for providing availability.
 我 20:00–20:30 不行
 
 → Automatically adjusts to keep **20:30–22:00** free.
-
-*(Screenshot placeholders)*  
-<img src="images/text-input-1.png" width="300">
+![IMG_0211](https://github.com/user-attachments/assets/d9d2dec4-e621-44a4-b29f-37c310e18dcd)
 
 ---
 
@@ -64,9 +62,8 @@ Hoppy supports two methods for providing availability.
 
 ### Step 1 — Private chat  
 Upload your course schedule, and Hoppy will parse and store it as weekly availability.
+![IMG_0212](https://github.com/user-attachments/assets/def51c4a-c2ca-4a67-b87f-ec2f6093db09)
 
-*(Screenshot placeholder)*  
-<img src="images/timetable-upload.png" width="300">
 
 ### Step 2 — Group chat  
 Members auto-fill availability using:
@@ -74,16 +71,13 @@ Members auto-fill availability using:
 
 Hoppy replies with their free intervals for the selected day.
 
-*(Screenshot placeholder)*  
-<img src="images/timetable-user1.png" width="300">
-
 ### Step 3 — Ask for the best meeting time  
 開會時間？
 
-Hoppy returns the earliest slot where all members are available.
+Hoppy returns the earliest slot (after 18:00) where all members are available.
 
-*(Screenshot placeholder)*  
-<img src="images/timetable-bestslot.png" width="300">
+![IMG_0213](https://github.com/user-attachments/assets/a327d45d-27b9-4d2f-8503-1d653ef1781f)
+
 
 ---
 
@@ -98,16 +92,15 @@ cd line-meeting-assistant-bot
 npm install
 
 Create .env:
+```bash
 CHANNEL_SECRET=xxx
 CHANNEL_ACCESS_TOKEN=xxx
 PORT=3000
 
-Run:
+Run
+```bash
 npm start
 
-## Architecture Overview
-
-```mermaid
 flowchart TD
     A[LINE User<br>(messages / timetable upload)]
     B[LINE Messaging API<br>Webhook delivery]
@@ -121,6 +114,7 @@ flowchart TD
     C --> D
     C --> E
     E --> F --> G
+
 
 
 
